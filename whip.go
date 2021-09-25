@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"crypto/tls"
 
 	"github.com/pion/mediadevices"
 	"github.com/pion/webrtc/v3"
@@ -86,7 +87,13 @@ func (whip *WHIPClient) Publish() {
 
 	// log.Println(offer.SDP)
 	var sdp = []byte(offer.SDP)
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
 	req, err := http.NewRequest("POST", whip.endpoint, bytes.NewBuffer(sdp))
 	if err != nil {
 		log.Fatal("Unexpected error building http request. ", err)
