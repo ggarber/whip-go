@@ -2,17 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"crypto/tls"
 
 	"github.com/pion/mediadevices"
 	"github.com/pion/webrtc/v3"
-
-	"github.com/pion/mediadevices/pkg/codec/vpx"
-	_ "github.com/pion/mediadevices/pkg/driver/screen" // This is required to register screen adapter
 )
 
 type WHIPClient struct {
@@ -28,29 +25,10 @@ func NewWHIPClient(endpoint string, token string) *WHIPClient {
 	return client
 }
 
-func (whip *WHIPClient) Publish() {
-	// configure codec specific parameters
-	vpxParams, _ := vpx.NewVP8Params()
-	vpxParams.BitRate = 1_000_000 // 1mbps
-
-	codecSelector := mediadevices.NewCodecSelector(
-		mediadevices.WithVideoEncoders(&vpxParams),
-	)
-
-	stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
-		Video: func(constraint *mediadevices.MediaTrackConstraints) {},
-		Codec: codecSelector,
-	})
-	if err != nil {
-		log.Fatal("Unexpected error capturing screen. ", err)
-	}
-
-	mediaEngine := webrtc.MediaEngine{}
-	codecSelector.Populate(&mediaEngine)
-	// mediaEngine.RegisterDefaultCodecs()
+func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine webrtc.MediaEngine, iceServers []webrtc.ICEServer, skipTlsAuth bool) {
 
 	config := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{},
+		ICEServers: iceServers,
 	}
 	pc, err := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine)).NewPeerConnection(config)
 	if err != nil {
@@ -90,7 +68,7 @@ func (whip *WHIPClient) Publish() {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: skipTlsAuth,
 			},
 		},
 	}
@@ -100,12 +78,19 @@ func (whip *WHIPClient) Publish() {
 	}
 
 	req.Header.Add("Content-Type", "application/sdp")
-	req.Header.Add("Authorization", "Bearer "+whip.token)
+	if whip.token != "" {
+		req.Header.Add("Authorization", "Bearer "+whip.token)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal("Failed http POST request. ", err)
 	}
+
+	if resp.StatusCode != 201 {
+		log.Fatalf("Non Successful POST: %d", resp.StatusCode)
+	}
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 
