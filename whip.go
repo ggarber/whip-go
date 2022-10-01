@@ -63,8 +63,14 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 		log.Fatal("PeerConnection could not set local offer. ", err)
 	}
 
-	// log.Println(offer.SDP)
-	var sdp = []byte(offer.SDP)
+	// Block until ICE Gathering is complete, disabling trickle ICE
+	// we do this because we only can exchange one signaling message
+	// in a production application you should exchange ICE Candidates via OnICECandidate
+	gatherComplete := webrtc.GatheringCompletePromise(pc)
+	<-gatherComplete
+
+	// log.Println(pc.LocalDescription().SDP)
+	var sdp = []byte(pc.LocalDescription().SDP)
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -87,12 +93,14 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 		log.Fatal("Failed http POST request. ", err)
 	}
 
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+
+	// log.Println(string(body))
+
 	if resp.StatusCode != 201 {
 		log.Fatalf("Non Successful POST: %d", resp.StatusCode)
 	}
-
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
 
 	resourceUrl, err := url.Parse(resp.Header.Get("Location"))
 	if err != nil {
@@ -103,7 +111,6 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 		log.Fatal("Failed to parse base url. ", err)
 	}
 	whip.resourceUrl = base.ResolveReference(resourceUrl).String()
-	// log.Println(string(body))
 
 	answer := webrtc.SessionDescription{}
 	answer.Type = webrtc.SDPTypeAnswer

@@ -38,8 +38,13 @@ func main() {
 	codecSelector.Populate(&mediaEngine)
 	// mediaEngine.RegisterDefaultCodecs()
 
-	//pass it into the whip client
-	iceServers := []webrtc.ICEServer{}
+	// pass it into the whip client
+	// TODO: Make it configurable
+	iceServers := []webrtc.ICEServer{
+		{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		},
+	}
 
 	whip := NewWHIPClient(os.Args[1], os.Args[2])
 	whip.Publish(stream, mediaEngine, iceServers, false)
