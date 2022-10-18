@@ -26,13 +26,18 @@ func main() {
 		mediadevices.WithVideoEncoders(&vpxParams),
 	)
 
-	stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
-		Video: func(constraint *mediadevices.MediaTrackConstraints) {},
-		Codec: codecSelector,
-	})
+	stream, err := GetInputMediaStream()
 	if err != nil {
 		log.Fatal("Unexpected error capturing screen. ", err)
 	}
+
+	// stream, err := mediadevices.GetDisplayMedia(mediadevices.MediaStreamConstraints{
+	// 	Video: func(constraint *mediadevices.MediaTrackConstraints) {},
+	// 	Codec: codecSelector,
+	// })
+	// if err != nil {
+	// 	log.Fatal("Unexpected error capturing screen. ", err)
+	// }
 
 	mediaEngine := webrtc.MediaEngine{}
 	codecSelector.Populate(&mediaEngine)
