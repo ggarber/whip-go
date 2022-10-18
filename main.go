@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec/vpx"
 	_ "github.com/pion/mediadevices/pkg/driver/screen" // This is required to register screen adapter
 	"github.com/pion/webrtc/v3"
@@ -22,11 +21,11 @@ func main() {
 	vpxParams, _ := vpx.NewVP8Params()
 	vpxParams.BitRate = 1_000_000 // 1mbps
 
-	codecSelector := mediadevices.NewCodecSelector(
-		mediadevices.WithVideoEncoders(&vpxParams),
+	codecSelector := NewCodecSelector(
+		WithVideoEncoders(&vpxParams),
 	)
 
-	stream, err := GetInputMediaStream()
+	stream, err := GetInputMediaStream(codecSelector)
 	if err != nil {
 		log.Fatal("Unexpected error capturing screen. ", err)
 	}
@@ -41,7 +40,6 @@ func main() {
 
 	mediaEngine := webrtc.MediaEngine{}
 	codecSelector.Populate(&mediaEngine)
-	// mediaEngine.RegisterDefaultCodecs()
 
 	// pass it into the whip client
 	// TODO: Make it configurable
