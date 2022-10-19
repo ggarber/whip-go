@@ -14,5 +14,7 @@ go build
 ## Running
 
 ```
-./whip-go WHIP_ENDPOINT_URL TOKEN
+./whip-go SOURCE WHIP_ENDPOINT_URL TOKEN
 ```
+
+The supported sources are either "screen" or the name of a file (f.e. "/dev/stdin") to ready raw YUV420 samples from.
