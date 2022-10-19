@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"image"
@@ -23,10 +22,10 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-func GetInputMediaStream(codecSelector *CodecSelector) (mediadevices.MediaStream, error) {
+func GetInputMediaStream(name string, codecSelector *CodecSelector) (mediadevices.MediaStream, error) {
 	tracks := make([]mediadevices.Track, 0)
 
-	track, err := GetInputMediaTrack(codecSelector)
+	track, err := GetInputMediaTrack(name, codecSelector)
 	if err != nil {
 		return nil, err
 	}
@@ -41,20 +40,19 @@ func GetInputMediaStream(codecSelector *CodecSelector) (mediadevices.MediaStream
 	return stream, nil
 }
 
-func GetInputMediaTrack(codecSelector *CodecSelector) (mediadevices.Track, error) {
-	stdin := bufio.NewReader(os.Stdin)
+func GetInputMediaTrack(name string, codecSelector *CodecSelector) (mediadevices.Track, error) {
+	pipe, _ := os.Open(name)
 
 	reader := video.ReaderFunc(func() (img image.Image, release func(), err error) {
 		area := 1280 * 720
 		bytes := make([]byte, 1280*720*1.5)
-		n, err := stdin.Read(bytes)
-		println("read", n, "bytes")
+		_, err = io.ReadFull(pipe, bytes)
 		yuv := image.NewYCbCr(image.Rect(0, 0, 1280, 720), image.YCbCrSubsampleRatio420)
 		copy(yuv.Y, bytes[0:area])
-		copy(yuv.Cr, bytes[area:area+area/4])
-		copy(yuv.Cb, bytes[area+area/4:area+area/4+area/4])
+		copy(yuv.Cb, bytes[area:area+area/4])
+		copy(yuv.Cr, bytes[area+area/4:area+area/4+area/4])
 		img = yuv
-		return img, func() {}, nil
+		return img, func() {}, err
 	})
 	track := newVideoTrackFromReader(reader, codecSelector)
 	return track, nil
