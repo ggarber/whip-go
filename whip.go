@@ -30,7 +30,13 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
 	}
-	pc, err := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine)).NewPeerConnection(config)
+	settings := webrtc.SettingEngine{}
+	// settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+
+	pc, err := webrtc.NewAPI(
+		webrtc.WithMediaEngine(&mediaEngine),
+		webrtc.WithSettingEngine(settings),
+	).NewPeerConnection(config)
 	if err != nil {
 		log.Fatal("Unexpected error building the PeerConnection. ", err)
 	}
@@ -70,6 +76,7 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 	<-gatherComplete
 
 	// log.Println(pc.LocalDescription().SDP)
+
 	var sdp = []byte(pc.LocalDescription().SDP)
 	client := &http.Client{
 		Transport: &http.Transport{
