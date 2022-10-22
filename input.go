@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -15,22 +17,33 @@ import (
 	"github.com/pion/interceptor"
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec"
+	"github.com/pion/mediadevices/pkg/io/audio"
 	"github.com/pion/mediadevices/pkg/io/video"
 	"github.com/pion/mediadevices/pkg/prop"
+	"github.com/pion/mediadevices/pkg/wave"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
 )
 
-func GetInputMediaStream(name string, codecSelector *CodecSelector) (mediadevices.MediaStream, error) {
+func GetInputMediaStream(audio string, video string, codecSelector *CodecSelector) (mediadevices.MediaStream, error) {
 	tracks := make([]mediadevices.Track, 0)
 
-	track, err := GetInputMediaTrack(name, codecSelector)
-	if err != nil {
-		return nil, err
+	if len(audio) > 0 {
+		track, err := GetAudioTrack(audio, codecSelector)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, track)
 	}
 
-	tracks = append(tracks, track)
+	if len(video) > 0 {
+		track, err := GetVideoTrack(video, codecSelector)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, track)
+	}
 
 	stream, err := mediadevices.NewMediaStream(tracks...)
 	if err != nil {
@@ -40,17 +53,37 @@ func GetInputMediaStream(name string, codecSelector *CodecSelector) (mediadevice
 	return stream, nil
 }
 
-func GetInputMediaTrack(name string, codecSelector *CodecSelector) (mediadevices.Track, error) {
+func GetAudioTrack(name string, codecSelector *CodecSelector) (mediadevices.Track, error) {
 	pipe, _ := os.Open(name)
+	data := make([]byte, 480*2)
+	chunkInfo := wave.ChunkInfo{
+		Len:          480,
+		Channels:     1,
+		SamplingRate: 48000,
+	}
+
+	reader := audio.ReaderFunc(func() (chunk wave.Audio, release func(), err error) {
+		_, err = io.ReadFull(pipe, data)
+		buffer := wave.NewInt16NonInterleaved(chunkInfo)
+		binary.Read(bytes.NewReader(data), binary.BigEndian, buffer.Data)
+		chunk = buffer
+		return chunk, func() {}, err
+	})
+	track := newAudioTrackFromReader(reader, codecSelector)
+	return track, nil
+}
+
+func GetVideoTrack(name string, codecSelector *CodecSelector) (mediadevices.Track, error) {
+	pipe, _ := os.Open(name)
+	area := 1280 * 720
+	data := make([]byte, 1280*720*1.5)
 
 	reader := video.ReaderFunc(func() (img image.Image, release func(), err error) {
-		area := 1280 * 720
-		bytes := make([]byte, 1280*720*1.5)
-		_, err = io.ReadFull(pipe, bytes)
+		_, err = io.ReadFull(pipe, data)
 		yuv := image.NewYCbCr(image.Rect(0, 0, 1280, 720), image.YCbCrSubsampleRatio420)
-		copy(yuv.Y, bytes[0:area])
-		copy(yuv.Cb, bytes[area:area+area/4])
-		copy(yuv.Cr, bytes[area+area/4:area+area/4+area/4])
+		copy(yuv.Y, data[0:area])
+		copy(yuv.Cb, data[area:area+area/4])
+		copy(yuv.Cr, data[area+area/4:area+area/4+area/4])
 		img = yuv
 		return img, func() {}, err
 	})
@@ -96,6 +129,11 @@ func (source InputSource) ID() string {
 	}
 
 	return generator.String()
+}
+
+type AudioTrack struct {
+	*baseTrack
+	*audio.Broadcaster
 }
 
 type VideoTrack struct {
@@ -171,6 +209,14 @@ func (track *VideoTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecPara
 }
 
 func (track *VideoTrack) Unbind(ctx webrtc.TrackLocalContext) error {
+	return track.unbind(ctx)
+}
+
+func (track *AudioTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParameters, error) {
+	return track.bind(ctx, track)
+}
+
+func (track *AudioTrack) Unbind(ctx webrtc.TrackLocalContext) error {
 	return track.unbind(ctx)
 }
 
@@ -312,6 +358,86 @@ func (track *baseTrack) removeActivePeerConnection(id string) chan<- chan<- stru
 	return ch
 }
 
+func (track *AudioTrack) newEncodedReader(codecNames ...string) (mediadevices.EncodedReadCloser, *codec.RTPCodec, error) {
+	reader := track.NewReader(false)
+	inputProp, err := detectCurrentAudioProp(track.Broadcaster)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	encodedReader, selectedCodec, err := track.selector.selectAudioCodecByNames(reader, inputProp, codecNames...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sample := newAudioSampler(selectedCodec.ClockRate, selectedCodec.Latency)
+
+	return &encodedReadCloserImpl{
+		readFn: func() (mediadevices.EncodedBuffer, func(), error) {
+			data, release, err := encodedReader.Read()
+			buffer := mediadevices.EncodedBuffer{
+				Data:    data,
+				Samples: sample(),
+			}
+			return buffer, release, err
+		},
+		closeFn:      encodedReader.Close,
+		controllerFn: encodedReader.Controller,
+	}, selectedCodec, nil
+}
+
+func (track *AudioTrack) NewEncodedReader(codecName string) (mediadevices.EncodedReadCloser, error) {
+	reader, _, err := track.newEncodedReader(codecName)
+	return reader, err
+}
+
+func (track *AudioTrack) NewEncodedIOReader(codecName string) (io.ReadCloser, error) {
+	encodedReader, _, err := track.newEncodedReader(codecName)
+	if err != nil {
+		return nil, err
+	}
+	return newEncodedIOReadCloserImpl(encodedReader), nil
+}
+
+func (track *AudioTrack) NewRTPReader(codecName string, ssrc uint32, mtu int) (mediadevices.RTPReadCloser, error) {
+	encodedReader, selectedCodec, err := track.newEncodedReader(codecName)
+	if err != nil {
+		return nil, err
+	}
+
+	packetizer := rtp.NewPacketizer(uint16(mtu), uint8(selectedCodec.PayloadType), ssrc, selectedCodec.Payloader, rtp.NewRandomSequencer(), selectedCodec.ClockRate)
+
+	return &rtpReadCloserImpl{
+		readFn: func() ([]*rtp.Packet, func(), error) {
+			encoded, release, err := encodedReader.Read()
+			if err != nil {
+				encodedReader.Close()
+				track.onError(err)
+				return nil, func() {}, err
+			}
+			defer release()
+
+			pkts := packetizer.Packetize(encoded.Data, encoded.Samples)
+			return pkts, release, err
+		},
+		closeFn:      encodedReader.Close,
+		controllerFn: encodedReader.Controller,
+	}, nil
+}
+
+func detectCurrentAudioProp(broadcaster *audio.Broadcaster) (prop.Media, error) {
+	var currentProp prop.Media
+
+	// Since broadcaster has a ring buffer internally, a new reader will either read the last
+	// buffered frame or a new frame from the source. This also implies that no frame will be lost
+	// in any case.
+	metaReader := broadcaster.NewReader(false)
+	metaReader = audio.DetectChanges(0, func(p prop.Media) { currentProp = p })(metaReader)
+	_, _, err := metaReader.Read()
+
+	return currentProp, err
+}
+
 func detectCurrentVideoProp(broadcaster *video.Broadcaster) (prop.Media, error) {
 	var currentProp prop.Media
 
@@ -326,6 +452,13 @@ func detectCurrentVideoProp(broadcaster *video.Broadcaster) (prop.Media, error) 
 }
 
 type samplerFunc func() uint32
+
+func newAudioSampler(clockRate uint32, latency time.Duration) samplerFunc {
+	samples := uint32(math.Round(float64(clockRate) * latency.Seconds()))
+	return samplerFunc(func() uint32 {
+		return samples
+	})
+}
 
 // newVideoSampler creates a video sampler that uses the actual video frame rate and
 // the codec's clock rate to come up with a duration for each sample.
@@ -403,6 +536,25 @@ func (track *VideoTrack) NewRTPReader(codecName string, ssrc uint32, mtu int) (m
 		closeFn:      encodedReader.Close,
 		controllerFn: encodedReader.Controller,
 	}, nil
+}
+
+func newAudioTrackFromReader(reader audio.Reader, selector *CodecSelector) mediadevices.Track {
+	base := newBaseTrack(mediadevices.AudioInput, selector)
+	wrappedReader := audio.ReaderFunc(func() (chunk wave.Audio, release func(), err error) {
+		chunk, _, err = reader.Read()
+		if err != nil {
+			// base.onError(err)
+		}
+		return chunk, func() {}, err
+	})
+
+	// TODO: Allow users to configure broadcaster
+	broadcaster := audio.NewBroadcaster(wrappedReader, nil)
+
+	return &AudioTrack{
+		baseTrack:   base,
+		Broadcaster: broadcaster,
+	}
 }
 
 func newVideoTrackFromReader(reader video.Reader, selector *CodecSelector) mediadevices.Track {

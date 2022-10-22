@@ -26,7 +26,6 @@ func NewWHIPClient(endpoint string, token string) *WHIPClient {
 }
 
 func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine webrtc.MediaEngine, iceServers []webrtc.ICEServer, skipTlsAuth bool) {
-
 	config := webrtc.Configuration{
 		ICEServers: iceServers,
 	}
