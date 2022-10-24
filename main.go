@@ -38,7 +38,7 @@ func main() {
 	var stream mediadevices.MediaStream
 	var err error
 
-	if len(*video) == 0 || *video == "screen" {
+	if *video == "screen" {
 		codecSelector := mediadevices.NewCodecSelector(
 			mediadevices.WithVideoEncoders(&vpxParams),
 		)

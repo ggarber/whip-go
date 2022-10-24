@@ -64,8 +64,8 @@ func GetAudioTrack(name string, codecSelector *CodecSelector) (mediadevices.Trac
 
 	reader := audio.ReaderFunc(func() (chunk wave.Audio, release func(), err error) {
 		_, err = io.ReadFull(pipe, data)
-		buffer := wave.NewInt16NonInterleaved(chunkInfo)
-		binary.Read(bytes.NewReader(data), binary.BigEndian, buffer.Data)
+		buffer := wave.NewInt16Interleaved(chunkInfo)
+		binary.Read(bytes.NewReader(data), binary.LittleEndian, buffer.Data)
 		chunk = buffer
 		return chunk, func() {}, err
 	})
@@ -81,6 +81,7 @@ func GetVideoTrack(name string, codecSelector *CodecSelector) (mediadevices.Trac
 	reader := video.ReaderFunc(func() (img image.Image, release func(), err error) {
 		_, err = io.ReadFull(pipe, data)
 		yuv := image.NewYCbCr(image.Rect(0, 0, 1280, 720), image.YCbCrSubsampleRatio420)
+
 		copy(yuv.Y, data[0:area])
 		copy(yuv.Cb, data[area:area+area/4])
 		copy(yuv.Cr, data[area+area/4:area+area/4+area/4])
