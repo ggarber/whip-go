@@ -128,14 +128,20 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 	}
 }
 
-func (whip *WHIPClient) Close() {
+func (whip *WHIPClient) Close(skipTlsAuth bool) {
 	req, err := http.NewRequest("DELETE", whip.resourceUrl, nil)
 	if err != nil {
 		log.Fatal("Unexpected error building http request. ", err)
 	}
 	req.Header.Add("Authorization", "Bearer "+whip.token)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: skipTlsAuth,
+			},
+		},
+	}
 	_, err = client.Do(req)
 	if err != nil {
 		log.Fatal("Failed http DELETE request. ", err)
