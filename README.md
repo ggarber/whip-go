@@ -14,12 +14,14 @@ go build
 ## Running
 
 ```
-./whip-go -v VIDEO_SOURCE -t TOKEN WHIP_ENDPOINT_URL
+./whip-go -v VIDEO_SOURCE -a AUDIO_SOURCE -vc VIDEO_CODEC -t TOKEN WHIP_ENDPOINT_URL
 ```
 
 The supported sources are either "screen" for screensharing, "test" for a test patter or the name of a file (f.e. "/dev/stdin") to ready raw YUV420 samples from.
 
-For more information run:
+The supported video codecs are vp8 and h264.
+
+For more information and additional configuration run:
 ```
 ./whip-go -h
 ```
