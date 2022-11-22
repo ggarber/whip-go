@@ -2,6 +2,8 @@ module whip-go
 
 go 1.13
 
+replace github.com/pion/mediadevices => github.com/vpalmisano/mediadevices v0.3.12-0.20221112100144-f1704d1a5634
+
 require (
 	github.com/BurntSushi/xgb v0.0.0-20201008132610-5f9e7b3c49cd // indirect
 	github.com/blackjack/webcam v0.0.0-20220329180758-ba064708e165 // indirect
@@ -22,5 +24,4 @@ require (
 	github.com/pion/webrtc/v3 v3.1.47
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
-	golang.org/x/image v0.0.0-20220722155232-062f8c9fd539 // indirect
 )
