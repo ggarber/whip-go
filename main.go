@@ -43,7 +43,6 @@ func main() {
 		panic(err)
 	}
 	vpxParams.BitRate = *videoBitrate
-	vpxParams.Deadline = 1
 
 	opusParams, err := opus.NewParams()
 	if err != nil {
