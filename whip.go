@@ -133,7 +133,9 @@ func (whip *WHIPClient) Close(skipTlsAuth bool) {
 	if err != nil {
 		log.Fatal("Unexpected error building http request. ", err)
 	}
-	req.Header.Add("Authorization", "Bearer "+whip.token)
+	if whip.token != "" {
+		req.Header.Add("Authorization", "Bearer "+whip.token)
+	}
 
 	client := &http.Client{
 		Transport: &http.Transport{
