@@ -1,8 +1,8 @@
-name: Go
+name: Build and Run
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   build:
