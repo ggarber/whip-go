@@ -86,7 +86,7 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			const MaxRedirectDepth = 10
 			if len(via) >= MaxRedirectDepth {
-				return fmt.Errorf("redirect limit exceeded: %d", MaxRedirectDepth)
+				return http.ErrUseLastResponse
 			}
 			req.Header.Set("Authorization", "Bearer "+whip.token)
 			return nil
