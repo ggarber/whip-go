@@ -84,7 +84,7 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 			},
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			req.Header.Add("Authorization", "Bearer "+whip.token)
+			req.Header.Set("Authorization", "Bearer "+whip.token)
 			return nil
 		},
 	}
