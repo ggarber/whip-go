@@ -83,6 +83,14 @@ func (whip *WHIPClient) Publish(stream mediadevices.MediaStream, mediaEngine web
 				InsecureSkipVerify: skipTlsAuth,
 			},
 		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			const MaxRedirectDepth = 10
+			if len(via) >= MaxRedirectDepth {
+				return fmt.Errorf("redirect limit exceeded: %d", MaxRedirectDepth)
+			}
+			req.Header.Set("Authorization", "Bearer "+whip.token)
+			return nil
+		},
 	}
 	req, err := http.NewRequest("POST", whip.endpoint, bytes.NewBuffer(sdp))
 	if err != nil {
